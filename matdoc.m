@@ -23,6 +23,7 @@ function matdoc(varargin)
     end
     
     processedTopics = {};
+    resourceFiles = {};
     for kt = 1:numel(topics)
         topic = topics{kt};
 
@@ -83,14 +84,14 @@ function matdoc(varargin)
     %
     % @param topicDoc The MATLAB HTML documentation file.
         % Pattern to match the contents of an href only.
-        aPattern = '<a href="(.*?)">';
-        hrefPattern = '(?<=<a href=")(.*?)(?=">)';
+        elemPattern = '(?:<a href="(.*?)">|<link rel="stylesheet" href="(.*?)">)';
+        hrefPattern = '(?<=href=")(.*?)(?=">)';
         helpwinPattern = 'matlab:helpwin\(''(.*)''\)';
         helpwinPattern2 = 'matlab:helpwin (.*)';
 
         d = fileread(topicDoc);
 
-        [matches, splits] = regexp(d, aPattern, 'match', 'split');
+        [matches, splits] = regexp(d, elemPattern, 'match', 'split');
 
         fout = fopen(topicDoc, 'w');
         fprintf(fout, '%s', splits{1});
@@ -113,7 +114,17 @@ function matdoc(varargin)
                 elseif (~isempty(helpwinMatcher2))
                     memberName = helpwinMatcher2{1}{1};
                 elseif (strfind(href, 'matlab:') == 1)
-                    % REmove the element here.
+                    % Remove the element here.
+                elseif (strfind(href, 'file:') == 1)
+                    [~, filename, ext] = fileparts(href);
+                    filename = [filename, ext]; %#ok<AGROW>
+                    if (~ismember(href, resourceFiles))
+                        copyfile(href(9:end), fullfile(rootOutDir, filename));
+                        resourceFiles = [resourceFiles, {href}]; %#ok<AGROW>
+                    end
+                    fprintf(fout, '%s%s%s', hrefSplits{1}, ...
+                            url2relurl(filename, nnz('.' == topic)), ...
+                            hrefSplits{2});
                 else
                     error('matdoc:UnexpectedHref', 'Unexpected href: %s', href);
                 end
@@ -148,9 +159,16 @@ function topics = package2topics(package)
 end
 
 function url = topic2url(topic, parentTopic)
-    url = [ '../', ...
-        regexprep(parentTopic, '.*?(\.|$)', '../'), ...
-        regexprep(topic, '\.', '/'), '.html'];
+    url = url2relurl([regexprep(topic, '\.', '/'), '.html'], ...
+                     nnz('.' == parentTopic) + 2);
+end
+
+function url = url2relurl(url, n)
+    relUrl = [];
+    for it = 1:n
+        relUrl = [relUrl, '../']; %#ok<AGROW>
+    end
+    url = [relUrl, url];
 end
 
 function file = topic2file(topic)
