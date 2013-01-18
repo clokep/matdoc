@@ -6,6 +6,7 @@ function matdoc(varargin)
 % @author Patrick Cloke (pcloke@mitre.org)
 
     rootOutDir = fullfile('docs', 'matlab');
+    title = 'MATLAB API';
     
     techdocRoot = sprintf('http://www.mathworks.com/help/releases/R%s/techdoc/ref/', version('-release'));
     
@@ -18,6 +19,7 @@ function matdoc(varargin)
             % ... do stuff ...
             topics = [topics, package2topics(package)]; %#ok<AGROW>
         elseif (exist(arg, 'dir'))
+            % XXX This should use "what".
             files = dir(fullfile(arg, '*.m'));
             files = regexprep({files.name}, '\.m$', '');
             topics = [topics, files]; %#ok<AGROW>
@@ -33,7 +35,7 @@ function matdoc(varargin)
     end
     
     processedTopics = sort(processedTopics);
-%     writeIndex(outFiles);
+    writeIndex();
 
     function url = writeDocumentation(topic)
     % Generates HTML documentation for the given MATLAB topic.
@@ -44,8 +46,7 @@ function matdoc(varargin)
             topic = regexprep(topic, '\\', '.');
         end
         
-        % Calculate the relative URL from the root directory.
-        url = [regexprep(topic, '\.', '/'), '.html'];
+        url = topic2url(topic);
         
         topicLoc = which(topic);
         if (~isempty(strfind(topicLoc, matlabroot)) || ...
@@ -151,6 +152,37 @@ function matdoc(varargin)
 
         fclose(fout);
     end
+    
+    function writeIndex()
+    % Writes an index file with links to the given set of MATLAB class
+    % documentation in the given directory.
+        fprintf('Building index...');
+        
+        if (isempty(title))
+            title = 'MATLAB API';
+        end
+
+        index = [ ...
+            '<html>', ...
+            sprintf('<head><title>%s</title>', title), ...
+            '<link rel="stylesheet" href="helpwin.css"/>', ...
+            '</head><body>', ...
+            sprintf('<div class="title">%s</div>', title)];
+        for it = 1:numel(processedTopics)
+            name = processedTopics{it};
+
+            index = [index, sprintf( ...
+                '<div class="name"><a href="%s">%s</a></div><br/>', ...
+                topic2url(name), name)]; %#ok<AGROW>
+        end
+        index = [index, '</body></html>'];
+
+        fout = fopen(fullfile(rootOutDir, 'index.html'), 'w');
+        fprintf(fout, '%s', index);
+        fclose(fout);
+        
+        disp('done!')
+    end
 end
 
 function topics = package2topics(package)
@@ -173,6 +205,11 @@ function url = createRelativeUrl(url, n)
         relUrl = [relUrl, '../']; %#ok<AGROW>
     end
     url = [relUrl, url];
+end
+
+function url = topic2url(topic)
+% Calculate the relative URL from the root directory.
+    url = [regexprep(topic, '\.', '/'), '.html'];
 end
 
 function file = topic2file(topic)
