@@ -83,40 +83,50 @@ function matdoc(varargin)
     %
     % @param topicDoc The MATLAB HTML documentation file.
         % Pattern to match the contents of an href only.
+        aPattern = '<a href="(.*?)">';
         hrefPattern = '(?<=<a href=")(.*?)(?=">)';
         helpwinPattern = 'matlab:helpwin\(''(.*)''\)';
         helpwinPattern2 = 'matlab:helpwin (.*)';
 
         d = fileread(topicDoc);
 
-        [matches, splits] = regexp(d, hrefPattern, 'match', 'split');
+        [matches, splits] = regexp(d, aPattern, 'match', 'split');
 
         fout = fopen(topicDoc, 'w');
         fprintf(fout, '%s', splits{1});
 
         for it = 1:numel(matches)
-            href = matches{it};
+            [href, hrefSplits] = regexp(matches{it}, hrefPattern, 'tokens', 'split');
+            if (~isempty(href))
+                href = href{1}{1};
+            else
+                href = '';
+            end
+            
             if (~isempty(href))
                 helpwinMatcher = regexp(href, helpwinPattern, 'tokens');
                 helpwinMatcher2 = regexp(href, helpwinPattern2, 'tokens');
 
                 memberName = [];
-
                 if (~isempty(helpwinMatcher))
                     memberName = helpwinMatcher{1}{1};
                 elseif (~isempty(helpwinMatcher2))
                     memberName = helpwinMatcher2{1}{1};
-    %             elseif (href.startsWith('matlab:'))
-    %                 elem.remove();
+                elseif (strfind(href, 'matlab:') == 1)
+                    % REmove the element here.
+                else
+                    error('matdoc:UnexpectedHref', 'Unexpected href: %s', href);
                 end
 
                 if (~isempty(memberName))
                     writeDocumentation(memberName);
                     href = fullfile(rootOutDir, topic2url(memberName, topic));
+                    fprintf(fout, '%s%s%s', hrefSplits{1}, href, hrefSplits{2});
                 end
             end
 
-            fprintf(fout, '%s%s', href, splits{it + 1});
+            % Always print the trailing information.
+            fprintf(fout, '%s', splits{it + 1});
         end
 
         fclose(fout);
