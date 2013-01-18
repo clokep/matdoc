@@ -7,44 +7,29 @@ function matdoc(varargin)
 
     outDir = fullfile('docs', 'matlab');
     
-    matClasses = {};
+    topics = {};
     for it = 1:nargin
         arg = varargin{it};
         
         package = meta.package.fromName(arg);
         if (~isempty(package))
             % ... do stuff ...
-            matClasses = [matClasses, package2topics(package)]; %#ok<AGROW>
+            topics = [topics, package2topics(package)]; %#ok<AGROW>
         elseif (exist(arg, 'dir'))
             files = dir(fullfile(arg, '*.m'));
             files = regexprep({files.name}, '\.m$', '');
-            matClasses = [matClasses, files]; %#ok<AGROW>
+            topics = [topics, files]; %#ok<AGROW>
         end
     end
     
-    processedFiles = {};
-    
-    for it = 1:numel(matClasses)
-        matClass = matClasses{it};
-        fprintf('Processing %s\n', matClass);
+    processedTopics = {};
+    for it = 1:numel(topics)
+        topic = topics{it};
 
-        outBaseName = matClass;
-        if (ismember('/', outBaseName))
-            outBaseName = regexprep(outBaseName, '/', '.');
-        elseif (ismember('\\', outBaseName))
-            outBaseName = regexprep(outBaseName, '\\', '.');
-        end
-
-        % Output files should be in folders.
-        outFile = fullfile(outDir, topic2file(outBaseName));
-
-        writeDocumentation(matClass, outFile);
-        writeTopicMembers(outFile, matClass, outDir);
-
-        processedFiles = [processedFiles, {outFile}]; %#ok<AGROW>
+        processedTopics = writeDocumentation(topic, outDir, processedTopics);
     end
     
-    processedFiles = sort(processedFiles);
+    processedTopics = sort(processedTopics);
 %     writeIndex(outFiles);
 end
 
@@ -62,24 +47,52 @@ function topics = package2topics(package)
     topics = [topics, functions];
 end
 
-function writeDocumentation(topic, file)
+function processedTopics = writeDocumentation(topic, rootOutDir, processedTopics)
 % Generates HTML documentation for the given MATLAB topic.
+
+    if (ismember('/', topic))
+        topic = regexprep(topic, '/', '.');
+    elseif (ismember('\\', topic))
+        topic = regexprep(topic, '\\', '.');
+    end
+    
+    if (ismember(topic, processedTopics))
+        % This page has already been generated, nothing to do!
+        return;
+    end
+    
+    topicLoc = which(topic);
+    if (~isempty(strfind(topicLoc, matlabroot)) || ...
+        ~isempty(strfind(topicLoc, 'built-in')))
+        % This is a built-in MATLAB function.
+        % XXX can we link this to online help docs?
+        return;
+    end
+    
+    fprintf('Processing %s\n', topic);
+
+    % Output files should be in folders.
+    outFile = fullfile(rootOutDir, topic2file(topic));
+
     % XXX use this information to not have links for topics that don't
     % exist.
     % hasDocs = ~isempty(topic);
     html = help2html(topic);
     
-    outDir = fileparts(file);
-    if (~exist(outDir, 'dir'))
-        mkdir(outDir);
+    topicOutDir = fileparts(outFile);
+    if (~exist(topicOutDir, 'dir'))
+        mkdir(topicOutDir);
     end
     
-    fout = fopen(file, 'w');
+    fout = fopen(outFile, 'w');
     fprintf(fout, '%s', html);
     fclose(fout);
+
+    processedTopics = [processedTopics, {topic}];
+    processedTopics = writeTopicMembers(outFile, topic, rootOutDir, processedTopics);
 end
 
-function writeTopicMembers(topicDoc, topic, outDir)
+function processedTopics = writeTopicMembers(topicDoc, topic, rootOutDir, processedTopics)
 % Creates documentation for the members of the given MATLAB topic
 % documentation file.
 %
@@ -111,12 +124,10 @@ function writeTopicMembers(topicDoc, topic, outDir)
 %             elseif (href.startsWith('matlab:'))
 %                 elem.remove();
             end
-
+            
             if (~isempty(memberName))
-                outFile = fullfile(outDir, topic2file(memberName));
-
-                writeDocumentation(memberName, outFile);
-                href = fullfile(outDir, topic2url(memberName, topic));
+                processedTopics = writeDocumentation(memberName, rootOutDir, processedTopics);
+                href = fullfile(rootOutDir, topic2url(memberName, topic));
             end
         end
         
