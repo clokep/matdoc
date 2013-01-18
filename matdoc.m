@@ -7,6 +7,8 @@ function matdoc(varargin)
 
     rootOutDir = fullfile('docs', 'matlab');
     
+    techdocRoot = sprintf('http://www.mathworks.com/help/releases/R%s/techdoc/ref/', version('-release'));
+    
     topics = {};
     for kt = 1:nargin
         arg = varargin{kt};
@@ -33,7 +35,7 @@ function matdoc(varargin)
     processedTopics = sort(processedTopics);
 %     writeIndex(outFiles);
 
-    function writeDocumentation(topic)
+    function url = writeDocumentation(topic)
     % Generates HTML documentation for the given MATLAB topic.
 
         if (ismember('/', topic))
@@ -41,17 +43,20 @@ function matdoc(varargin)
         elseif (ismember('\\', topic))
             topic = regexprep(topic, '\\', '.');
         end
-
-        if (ismember(topic, processedTopics))
-            % This page has already been generated, nothing to do!
-            return;
-        end
-
+        
+        % Calculate the relative URL from the root directory.
+        url = [regexprep(topic, '\.', '/'), '.html'];
+        
         topicLoc = which(topic);
         if (~isempty(strfind(topicLoc, matlabroot)) || ...
             ~isempty(strfind(topicLoc, 'built-in')))
             % This is a built-in MATLAB function.
-            % XXX can we link this to online help docs?
+            url = [techdocRoot, url];
+            return;
+        end
+
+        if (ismember(topic, processedTopics))
+            % This page has already been generated, nothing to do!
             return;
         end
 
@@ -123,16 +128,20 @@ function matdoc(varargin)
                         resourceFiles = [resourceFiles, {href}]; %#ok<AGROW>
                     end
                     fprintf(fout, '%s%s%s', hrefSplits{1}, ...
-                            url2relurl(filename, nnz('.' == topic)), ...
+                            createRelativeUrl(filename, nnz('.' == topic)), ...
                             hrefSplits{2});
                 else
                     error('matdoc:UnexpectedHref', 'Unexpected href: %s', href);
                 end
 
                 if (~isempty(memberName))
-                    writeDocumentation(memberName);
-                    href = fullfile(rootOutDir, topic2url(memberName, topic));
-                    fprintf(fout, '%s%s%s', hrefSplits{1}, href, hrefSplits{2});
+                    url = writeDocumentation(memberName);
+                    httpLoc = strfind(url, 'http:');
+                    if (isempty(httpLoc) || httpLoc ~= 1)
+                        url = fullfile(rootOutDir, ...
+                            createRelativeUrl(url, nnz('.' == topic) + 2));
+                    end
+                    fprintf(fout, '%s%s%s', hrefSplits{1}, url, hrefSplits{2});
                 end
             end
 
@@ -158,12 +167,7 @@ function topics = package2topics(package)
     topics = [topics, functions];
 end
 
-function url = topic2url(topic, parentTopic)
-    url = url2relurl([regexprep(topic, '\.', '/'), '.html'], ...
-                     nnz('.' == parentTopic) + 2);
-end
-
-function url = url2relurl(url, n)
+function url = createRelativeUrl(url, n)
     relUrl = [];
     for it = 1:n
         relUrl = [relUrl, '../']; %#ok<AGROW>
