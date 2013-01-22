@@ -19,9 +19,13 @@ function matdoc(varargin)
             % ... do stuff ...
             topics = [topics, package2topics(package)]; %#ok<AGROW>
         elseif (exist(arg, 'dir'))
-            % XXX This should use "what".
-            files = dir(fullfile(arg, '*.m'));
-            files = regexprep({files.name}, '\.m$', '');
+            files = what(arg);
+            
+            for lt = 1:numel(files.packages)
+               topics = [topics, package2topics(meta.package.fromName(files.packages{lt}))]; %#ok<AGROW>
+            end
+            
+            files = regexprep([files.m, files.classes], '\.m$', '');
             topics = [topics, files]; %#ok<AGROW>
         end
     end
@@ -61,16 +65,16 @@ function matdoc(varargin)
             return;
         end
 
+        % Do not attempt to generate unavailable help information.
+        if (isempty(help(topic)))
+            url = '';
+            return;
+        end
         fprintf('Processing %s\n', topic);
+        html = help2html(topic);
 
         % Output files should be in folders.
         outFile = fullfile(rootOutDir, topic2file(topic));
-
-        % XXX use this information to not have links for topics that don't
-        % exist.
-        % hasDocs = ~isempty(topic);
-        html = help2html(topic);
-
         topicOutDir = fileparts(outFile);
         if (~exist(topicOutDir, 'dir'))
             mkdir(topicOutDir);
@@ -90,8 +94,11 @@ function matdoc(varargin)
     %
     % @param topicDoc The MATLAB HTML documentation file.
         % Pattern to match the contents of an href only.
-        elemPattern = '(?:<a href="(.*?)">|<link rel="stylesheet" href="(.*?)">)';
-        hrefPattern = '(?<=href=")(.*?)(?=">)';
+        elemPattern = '(?:<a href="(.*?)">.*?</a>|<link rel="stylesheet" href="(.*?)">)';
+        % Splits an element into the part before the href, the href, the
+        % closing of the start tag, the text in the tag and the closing
+        % tag.
+        hrefPattern = '^(?<start><.+ href=")(?<href>[^"]*)(?<closeStart>">)(?<text>[^<]*)(?<end></a>)?$';
         helpwinPattern = 'matlab:helpwin\(''(.*)''\)';
         helpwinPattern2 = 'matlab:helpwin (.*)';
 
@@ -103,14 +110,11 @@ function matdoc(varargin)
         fprintf(fout, '%s', splits{1});
 
         for it = 1:numel(matches)
-            [href, hrefSplits] = regexp(matches{it}, hrefPattern, 'tokens', 'split');
-            if (~isempty(href))
-                href = href{1}{1};
-            else
-                href = '';
-            end
-            
-            if (~isempty(href))
+            hrefTokens = regexp(matches{it}, hrefPattern, 'tokens');
+            if (~isempty(hrefTokens))
+                hrefTokens = hrefTokens{1};
+                href = hrefTokens{2};
+
                 helpwinMatcher = regexp(href, helpwinPattern, 'tokens');
                 helpwinMatcher2 = regexp(href, helpwinPattern2, 'tokens');
 
@@ -121,6 +125,7 @@ function matdoc(varargin)
                     memberName = helpwinMatcher2{1}{1};
                 elseif (strfind(href, 'matlab:') == 1)
                     % Remove the element here.
+                    url = '';
                 elseif (strfind(href, 'file:') == 1)
                     [~, filename, ext] = fileparts(href);
                     filename = [filename, ext]; %#ok<AGROW>
@@ -128,22 +133,29 @@ function matdoc(varargin)
                         copyfile(href(9:end), fullfile(rootOutDir, filename));
                         resourceFiles = [resourceFiles, {href}]; %#ok<AGROW>
                     end
-                    fprintf(fout, '%s%s%s', hrefSplits{1}, ...
-                            createRelativeUrl(filename, nnz('.' == topic)), ...
-                            hrefSplits{2});
+                    url = createRelativeUrl(filename, nnz('.' == topic));
                 else
                     error('matdoc:UnexpectedHref', 'Unexpected href: %s', href);
                 end
 
                 if (~isempty(memberName))
                     url = writeDocumentation(memberName);
-                    httpLoc = strfind(url, 'http:');
-                    if (isempty(httpLoc) || httpLoc ~= 1)
-                        url = fullfile(rootOutDir, ...
-                            createRelativeUrl(url, nnz('.' == topic) + 2));
+                    if (~isempty(url))
+                        httpLoc = strfind(url, 'http:');
+                        if (isempty(httpLoc) || httpLoc ~= 1)
+                            url = fullfile(rootOutDir, ...
+                                createRelativeUrl(url, nnz('.' == topic) + 2));
+                        end
                     end
-                    fprintf(fout, '%s%s%s', hrefSplits{1}, url, hrefSplits{2});
                 end
+            end
+            
+            if (~isempty(url))
+                % If a URL is given, reprint the element with the new URL.
+                fprintf(fout, '%s%s%s%s%s', hrefTokens{1}, url, hrefTokens{3:5});
+            else
+                % Otherwise, just print the text inside of the element.
+                fprintf(fout, '%s', hrefTokens{4});
             end
 
             % Always print the trailing information.
@@ -186,6 +198,10 @@ function matdoc(varargin)
 end
 
 function topics = package2topics(package)
+    if (isempty(package))
+        return;
+    end
+    
     topics = {};
     for it = 1:numel(package.PackageList)
         subtopics = package2topics(package.PackageList(it));
