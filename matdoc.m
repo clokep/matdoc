@@ -42,13 +42,7 @@ function matdoc(varargin)
     writeIndex();
 
     function url = writeDocumentation(topic)
-    % Generates HTML documentation for the given MATLAB topic.
-
-        if (ismember('/', topic))
-            topic = regexprep(topic, '/', '.');
-        elseif (ismember('\\', topic))
-            topic = regexprep(topic, '\\', '.');
-        end
+    % Generates HTML documentation for the given MATLAB topic and returns a relative URL to that topic.
         
         url = topic2url(topic);
         
@@ -180,8 +174,15 @@ function matdoc(varargin)
             '<link rel="stylesheet" href="helpwin.css"/>', ...
             '</head><body>', ...
             sprintf('<div class="title">%s</div>', title)];
+        
         for it = 1:numel(processedTopics)
             name = processedTopics{it};
+            
+            % If there is no file available for the topic, assume it is a
+            % sub-topic and don't include it on the index.
+            if (isempty(which(name)))
+                continue;
+            end
 
             index = [index, sprintf( ...
                 '<div class="name"><a href="%s">%s</a></div><br/>', ...
