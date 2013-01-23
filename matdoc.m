@@ -137,8 +137,7 @@ function matdoc(varargin)
                     if (~isempty(url))
                         httpLoc = strfind(url, 'http:');
                         if (isempty(httpLoc) || httpLoc ~= 1)
-                            url = fullfile(rootOutDir, ...
-                                createRelativeUrl(url, nnz('.' == topic) + 2));
+                            url = createRelativeUrl(url, nnz('.' == topic));
                         end
                     end
                 end
@@ -221,14 +220,15 @@ function url = createRelativeUrl(url, n)
     for it = 1:n
         relUrl = [relUrl, '../']; %#ok<AGROW>
     end
-    url = [relUrl, url];
+    % Ensure we have a URL and not a filepath.
+    url = strrep([relUrl, url], '\\', '/');
 end
 
 function url = topic2url(topic)
 % Calculate the relative URL from the root directory.
-    url = [regexprep(topic, '\.', '/'), '.html'];
+    url = [strrep(topic, '.', '/'), '.html'];
 end
 
 function file = topic2file(topic)
-    file = [regexprep(topic, '\.', filesep), '.html'];
+    file = [strrep(topic, '.', filesep), '.html'];
 end
