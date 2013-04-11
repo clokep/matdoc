@@ -117,10 +117,11 @@ function matdoc(varargin)
                     memberName = helpwinMatcher{1}{1};
                 elseif (~isempty(helpwinMatcher2))
                     memberName = helpwinMatcher2{1}{1};
-                elseif (strfind(href, 'matlab:') == 1)
+                elseif (strstart(href, 'matlab:'))
                     % Remove the element here.
                     url = '';
-                elseif (strfind(href, 'file:') == 1)
+                elseif (strstart(href, 'file:'))
+                    % Copy the file and replace it with a relative path.
                     [~, filename, ext] = fileparts(href);
                     filename = [filename, ext]; %#ok<AGROW>
                     if (~ismember(href, resourceFiles))
@@ -128,6 +129,9 @@ function matdoc(varargin)
                         resourceFiles = [resourceFiles, {href}]; %#ok<AGROW>
                     end
                     url = createRelativeUrl(filename, nnz('.' == topic));
+                elseif (strstart(href, 'https?:') || strstart(href, '(sftp|ftps?):'))
+                    % These external URLs are "OK" and should be left.
+                    url = href;
                 else
                     error('matdoc:UnexpectedHref', 'Unexpected href: %s', href);
                 end
@@ -135,10 +139,7 @@ function matdoc(varargin)
                 if (~isempty(memberName))
                     url = writeDocumentation(memberName);
                     if (~isempty(url))
-                        httpLoc = strfind(url, 'http:');
-                        if (isempty(httpLoc) || httpLoc ~= 1)
-                            url = createRelativeUrl(url, nnz('.' == topic));
-                        end
+                        url = createRelativeUrl(url, nnz('.' == topic));
                     end
                 end
             end
@@ -231,4 +232,10 @@ end
 
 function file = topic2file(topic)
     file = [strrep(topic, '.', filesep), '.html'];
+end
+
+function isstart = strstart(str, pattern)
+% Check if a string starts with a pattern.
+    loc = regexp(str, ['^', pattern], 'start');
+    isstart = ~isempty(loc) && loc(1) == 1;
 end
