@@ -5,6 +5,20 @@ function matdoc(varargin)
 % @author Garrett Wampole (gwampole@mitre.org)
 % @author Patrick Cloke (pcloke@mitre.org)
 
+%
+% The overall classification of this file is UNCLASSIFIED.
+%
+%                             NOTICE
+%
+%        This software was produced for the U. S. Government
+%   under Contract No. W15P7T-10-C-F600 - W15P7T-13-C-F600, and is
+%      subject to the Rights in Noncommercial Computer Software
+%      and Noncommercial Computer Software Documentation Clause
+%                (DFARS) 252.227-7014 (JUN 1995)
+%
+%    (c) 2010-2013 The MITRE Corporation. All Rights Reserved.
+%
+
     rootOutDir = fullfile('docs', 'matlab');
     title = 'MATLAB API';
     
