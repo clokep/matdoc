@@ -40,7 +40,7 @@ function matdoc(varargin)
             end
             
             files = regexprep([files.m, files.classes], '\.m$', '');
-            topics = [topics, files]; %#ok<AGROW>
+            topics = [topics, files']; %#ok<AGROW>
         end
     end
     
