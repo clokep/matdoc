@@ -3,7 +3,8 @@
 Simply add `matdoc` to your MATLAB path and then run using:
 
 ```
-matdoc('files', 'or/folders', 'to/generate/docs/for');
+% matdoc takes files, folders or package names.
+matdoc('example.m', 'org.mitre', 'src/matlab');
 ```
 
 You'll end up with a subdirectory called `docs` that has the documentation

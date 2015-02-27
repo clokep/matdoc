@@ -2,6 +2,17 @@ function matdoc(varargin)
 % Generates MATLAB API documentation for a set of MATLAB class definitions.
 % Assumes that all functions are on the MATLAB path.
 %
+% The first input is a cellstr of topics to document. Each can be:
+%   m-filename  The file will be added to the list to be documented.
+%   directory   All files in that directory get added.
+%   package     Everything inside that package is added.
+%
+% A set of parameters can be used to configure matdoc:
+%   outDir      A string output directory, defaults to 'docs'.
+%   title       A string title for the index page, defaults to 'MATLAB
+%               API'.
+%   clean       Whether to delete outDir before creating it.
+%
 % @author Garrett Wampole (gwampole@mitre.org)
 % @author Patrick Cloke (pcloke@mitre.org)
 
@@ -19,19 +30,44 @@ function matdoc(varargin)
 %    (c) 2010-2013 The MITRE Corporation. All Rights Reserved.
 %
 
-    rootOutDir = fullfile('docs', 'matlab');
-    title = 'MATLAB API';
+    % Create a parser for the input.
+    parser = inputParser();
+    parser.KeepUnmatched = true;
+    parser.addRequired('topics', @(t) iscellstr(t) || ischar(t));
+    parser.addParamValue('outDir', 'docs', @ischar);
+    parser.addParamValue('title', 'MATLAB API', @ischar);
+    parser.addParamValue('clean', false, @islogical);
+    parser.parse(varargin{:});
+    % Parse and save the input.
+    input = parser.Results;
     
+    % Ensure the topics is a cellstr.
+    if (ischar(input.topics))
+        input.topics = {input.topics};
+    end
+
+    % The location of documentation on the MathWork's website.
     techdocRoot = sprintf('http://www.mathworks.com/help/releases/R%s/techdoc/ref/', version('-release'));
     
+    % Remove the output directory if desired.
+    if (input.clean && exist(input.outDir, 'dir'))
+        rmdir(input.outDir, 's');
+    end
+    
+    % The list of things to generate documentation for.
     topics = {};
-    for kt = 1:nargin
-        arg = varargin{kt};
+    for kt = 1:numel(input.topics)
+        arg = input.topics{kt};
         
+        % Check if the arg is a package and include everything in the
+        % package.
         package = meta.package.fromName(arg);
         if (~isempty(package))
             % ... do stuff ...
             topics = [topics, package2topics(package)]; %#ok<AGROW>
+
+        % Check if the arg is a directory (and include everything inside of
+        % it).
         elseif (exist(arg, 'dir'))
             files = what(arg);
             
@@ -41,11 +77,19 @@ function matdoc(varargin)
             
             files = regexprep([files.m, files.classes], '\.m$', '');
             topics = [topics, files']; %#ok<AGROW>
+
+        % Check if the arg is just a file and include it.
+        % TODO Ensure it is an m-file?
+        elseif (exist(arg, 'file'))
+            topics = [topics, regexprep(arg, '\.m$', '')]; %#ok<AGROW>
         end
     end
     
+    % Topics that have already had documentation generated.
     processedTopics = {};
+    % Files to copy out of the MATLAB installation.
     resourceFiles = {};
+    % Iterate over each target and generate the documentation.
     for kt = 1:numel(topics)
         topic = topics{kt};
 
@@ -56,7 +100,8 @@ function matdoc(varargin)
     writeIndex();
 
     function url = writeDocumentation(topic)
-    % Generates HTML documentation for the given MATLAB topic and returns a relative URL to that topic.
+    % Generates HTML documentation for the given MATLAB topic and returns a
+    % relative URL to that topic.
         
         url = topic2url(topic);
         
@@ -82,7 +127,7 @@ function matdoc(varargin)
         html = help2html(topic);
 
         % Output files should be in folders.
-        outFile = fullfile(rootOutDir, topic2file(topic));
+        outFile = fullfile(input.outDir, topic2file(topic));
         topicOutDir = fileparts(outFile);
         if (~exist(topicOutDir, 'dir'))
             mkdir(topicOutDir);
@@ -139,7 +184,7 @@ function matdoc(varargin)
                     [~, filename, ext] = fileparts(href);
                     filename = [filename, ext]; %#ok<AGROW>
                     if (~ismember(href, resourceFiles))
-                        copyfile(href(9:end), fullfile(rootOutDir, filename));
+                        copyfile(href(9:end), fullfile(input.outDir, filename));
                         resourceFiles = [resourceFiles, {href}]; %#ok<AGROW>
                     end
                     url = createRelativeUrl(filename, nnz('.' == topic));
@@ -177,17 +222,13 @@ function matdoc(varargin)
     % Writes an index file with links to the given set of MATLAB class
     % documentation in the given directory.
         fprintf('Building index...');
-        
-        if (isempty(title))
-            title = 'MATLAB API';
-        end
 
         index = [ ...
             '<html>', ...
-            sprintf('<head><title>%s</title>', title), ...
+            sprintf('<head><title>%s</title>', input.title), ...
             '<link rel="stylesheet" href="helpwin.css"/>', ...
             '</head><body>', ...
-            sprintf('<div class="title">%s</div>', title)];
+            sprintf('<div class="title">%s</div>', input.title)];
         
         for it = 1:numel(processedTopics)
             name = processedTopics{it};
@@ -204,7 +245,7 @@ function matdoc(varargin)
         end
         index = [index, '</body></html>'];
 
-        fout = fopen(fullfile(rootOutDir, 'index.html'), 'w');
+        fout = fopen(fullfile(input.outDir, 'index.html'), 'w');
         fprintf(fout, '%s', index);
         fclose(fout);
         
@@ -213,20 +254,31 @@ function matdoc(varargin)
 end
 
 function topics = package2topics(package)
+% Take a package and add everything inside of it (including sub-packages).
+
+    % If the package doesn't exist, just return.
     if (isempty(package))
         return;
     end
-    
+
+    % The output variable.
     topics = {};
+
+    % Iterate over the sub-packages and recursively get contents.
     for it = 1:numel(package.PackageList)
         subtopics = package2topics(package.PackageList(it));
         topics = [topics, subtopics]; %#ok<AGROW>
     end
+
+    % Add any classes inside the package.
     topics = [topics, {package.ClassList.Name}];
+
+    % Add any functions (m-files) inside the package.
     functions = {package.FunctionList.Name};
     for it = 1:numel(functions)
         functions{it} = [package.Name, '.', functions{it}];
     end
+
     topics = [topics, functions];
 end
 
